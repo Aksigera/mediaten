@@ -8,92 +8,128 @@ use Yii;
 
 class SpecialActiveRecord extends ActiveRecord implements IHaveSpecialFields
 {
-	private $_specialFields = [];
+    const MODEL_FIELD = 'model';
+    const PROPERTY_NAME_FIELD = 'name';
+    const INSTANCE_ID_FIELD = 'model_id';
+    const VALUE_FIELD = 'content';
 
-	public function __construct()
-	{
-		$this->initSpecialFieldsArray();
-		parent::__construct();
-	}
 
-	public function __set($name, $value)
-	{
-		if (isset($this->_specialFields[$name]) || array_key_exists($name, $this->_specialFields)) {
-			$this->_specialFields[$name] = $value;
-			return;
-		} else {
-			parent::__set($name, $value);
-		}
-	}
+    private $_specialFields = [];
 
-	public function __get($name)
-	{
-		if (isset($this->_specialFields[$name]) || array_key_exists($name, $this->_specialFields)) {
-			return $this->_specialFields[$name];
-		}
-		return parent::__get($name);
-	}
+    public function __construct()
+    {
+        $this->initSpecialFieldsArray();
+        parent::__construct();
+    }
 
-	public function save($runValidation = true, $attributeNames = null)
-	{
-		if (count($this->_specialFields)) {
-			$table = Yii::$app->params['specialTable'];
+    public function __set($name, $value)
+    {
+        if (isset($this->_specialFields[$name]) || array_key_exists($name, $this->_specialFields)) {
+            $this->_specialFields[$name] = $value;
+            return;
+        } else {
+            parent::__set($name, $value);
+        }
+    }
 
-			foreach ($this->_specialFields as $key => $value) {
-				$newCommand = Yii::$app->db->createCommand();
+    public function __get($name)
+    {
+        if (isset($this->_specialFields[$name]) || array_key_exists($name, $this->_specialFields)) {
+            return $this->_specialFields[$name];
+        }
+        return parent::__get($name);
+    }
 
-				if (isset($value)) {
-					if (self::getIsSpecialPropInDb($key)) {
-						$newCommand->update($table, [
-							'value' => $value
-						], [
-							'modelName' => $this->className(),
-							'property' => $key,
-						])->execute();
-					} else {
-						$newCommand->insert($table, [
-							'value' => $value,
-							'modelName' => $this->className(),
-							'property' => $key,
-						])->execute();
-					}
-				} else {
-					$newCommand->delete($table, [
-						'modelName' => $this->className(),
-						'property' => $key,
-					])->execute();
-				}
-			}
-		}
+    public function save($runValidation = true, $attributeNames = null)
+    {
+        if (count($this->_specialFields)) {
+            $table = Yii::$app->params['specialTable'];
 
-		return parent::save($runValidation, $attributeNames);
-	}
+            foreach ($this->_specialFields as $key => $value) {
+                $newCommand = Yii::$app->db->createCommand();
 
-	public function addSpecialField($name)
-	{
-		$this->_specialFields[$name] = null;
-		return null;
-	}
+                if ($this->id) {
+                    if (isset($value)) {
+                        if (self::getIsSpecialPropInDb($key)) {
+                            $newCommand->update($table, [
+                                self::VALUE_FIELD => $value
+                            ], [
+                                self::MODEL_FIELD => $this->className(),
+                                self::PROPERTY_NAME_FIELD => $key,
+                                self::INSTANCE_ID_FIELD => $this->id,
+                            ])->execute();
+                        } else {
+                            $newCommand->insert($table, [
+                                self::VALUE_FIELD => $value,
+                                self::MODEL_FIELD => $this->className(),
+                                self::PROPERTY_NAME_FIELD => $key,
+                                self::INSTANCE_ID_FIELD => $this->id,
+                            ])->execute();
+                        }
+                    } elseif (self::getIsSpecialPropInDb($key)) {
+                        $newCommand->delete($table, [
+                            self::MODEL_FIELD => $this->className(),
+                            self::INSTANCE_ID_FIELD => $this->id,
+                            self::PROPERTY_NAME_FIELD => $key,
+                        ])->execute();
 
-	private function initSpecialFieldsArray(){
-		$query = (new Query())
-			->select('property, value')
-			->from(Yii::$app->params['specialTable'])
-			->where(['modelName' => $this::className()])
-			->all();
-		foreach ($query as $row) {
-			$this->_specialFields[$row['property']] = $row['value'];
-		}
-	}
+                    }
+                } elseif (isset($value)) {
+                    $idOfThisInstance = self::getIdOfFollowInstance();
+                    $newCommand->insert($table, [
+                        self::VALUE_FIELD => $value,
+                        self::MODEL_FIELD => $this->className(),
+                        self::PROPERTY_NAME_FIELD => $key,
+                        self::INSTANCE_ID_FIELD => $idOfThisInstance,
+                    ])->execute();
+                }
+            }
+        }
 
-	private function getIsSpecialPropInDb($name)
-	{
-		$table = Yii::$app->params['specialTable'];
+        return parent::save($runValidation, $attributeNames);
+    }
 
-		return (new Query())
-			->from($table)
-			->where("property = '$name'")
-			->one();
-	}
+    public function addSpecialField($name)
+    {
+        $this->_specialFields[$name] = null;
+        return null;
+    }
+
+    private function initSpecialFieldsArray()
+    {
+        if (isset($this->id)) {
+            $query = (new Query())
+                ->select(self::PROPERTY_NAME_FIELD, self::VALUE_FIELD)
+                ->from(Yii::$app->params['specialTable'])
+                ->where([
+                    self::MODEL_FIELD => $this::className(),
+                    self::INSTANCE_ID_FIELD => $this->id,
+                ])
+                ->all();
+            foreach ($query as $row) {
+                $this->_specialFields[$row[self::PROPERTY_NAME_FIELD]] = $row[self::VALUE_FIELD];
+            }
+        }
+    }
+
+    private function getIsSpecialPropInDb($name)
+    {
+        $table = Yii::$app->params['specialTable'];
+
+        return (new Query())
+            ->from($table)
+            ->where([
+                self::MODEL_FIELD => $this::className(),
+                self::INSTANCE_ID_FIELD => $this->id,
+                self::PROPERTY_NAME_FIELD => $name,
+            ])
+            ->one();
+    }
+
+    private function getIdOfFollowInstance()
+    {
+        $preventRecord = $this->find()->orderBy(['id' => SORT_DESC])->one();
+        return $preventRecord->id + 1;
+    }
 
 }

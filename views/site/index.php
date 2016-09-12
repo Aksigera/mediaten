@@ -12,7 +12,6 @@ $model->info = 'Класс app\classes\SpecialActiveRecord наследует yi
  должна наследовать этот класс и необходимо добавить новое поле с помощью метода addSpecialField($name)';
 
 echo $model->newField;
-echo $model->superSpecial = '</br>';
 echo $model->info;
 ?>
 <div class="site-index">

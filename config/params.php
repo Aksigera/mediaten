@@ -2,5 +2,5 @@
 
 return [
     'adminEmail' => 'admin@example.com',
-    'specialTable' => 'specialTable',
+    'specialTable' => 'tv_text',
 ];
